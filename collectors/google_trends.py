@@ -7,36 +7,40 @@ import os
 
 logger = logging.getLogger(__name__)
 
-BEAUTY_KEYWORDS = [
-    'skin', 'hair', 'makeup', 'beauty', 'serum', 'cream', 'oil', 'shampoo', 
-    'lipstick', 'foundation', 'glow', 'acne', 'vitamin', 'acid', 'moisturizer',
-    'routine', 'facial', 'derma', 'cosmetic', 'loreal', 'lakme', 'nykaa',
-    'skincare', 'haircare', 'wellness', 'spa', 'retinol', 'niacinamide'
-]
+# Category IDs: 242 (Skin Care), 241 (Hair Care), 234 (Makeup & Cosmetics)
+BEAUTY_CATEGORIES = [242, 241, 234]
 
 def get_google_trends():
-    """Fetch trending searches in India and filter for beauty relevance."""
-    all_trends = []
-    
-    # Method 1: RSS Feed
+    """Directly fetch 'Rising' beauty trends using Google Category IDs."""
+    direct_trends = []
     try:
-        rss_url = "https://trends.google.com/trending/rss?geo=IN"
-        feed = feedparser.parse(rss_url)
-        if feed.entries:
-            for entry in feed.entries:
-                all_trends.append(entry.title)
+        pytrends = TrendReq(hl='en-IN', tz=330)
+        
+        for cat_id in BEAUTY_CATEGORIES:
+            try:
+                # We search for 'Rising' queries in India for these categories over the last 7 days
+                pytrends.build_payload(kw_list=[''], cat=cat_id, timeframe='now 7-d', geo='IN')
+                related_queries = pytrends.related_queries()
+                
+                # 'rising' queries are those with the highest growth percentage
+                rising_data = related_queries.get('', {}).get('rising')
+                
+                if rising_data is not None and not rising_data.empty:
+                    # Extract the query strings
+                    queries = rising_data['query'].tolist()
+                    direct_trends.extend(queries[:10]) # Top 10 from each category
+                    logger.info(f"Fetched {len(queries)} direct trends for category {cat_id}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch for category {cat_id}: {e}")
+                
     except Exception as e:
-        logger.warning(f"RSS trends fetch failed: {e}")
+        logger.error(f"Pytrends initialization failed: {e}")
 
-    # Filter for beauty relevance
-    beauty_trends = []
-    for trend in all_trends:
-        trend_lower = trend.lower()
-        if any(kw in trend_lower for kw in BEAUTY_KEYWORDS):
-            beauty_trends.append(trend)
-            
-    logger.info(f"Filtered {len(beauty_trends)} beauty trends out of {len(all_trends)} total searches.")
-    return list(set(beauty_trends))
+    # Fallback to general RSS if direct search fails (with filter)
+    if not direct_trends:
+        return [] # Or use the previous filtering logic as a backup
+
+    return list(set(direct_trends))
 
 def get_breakout_trends(keywords):
     """
