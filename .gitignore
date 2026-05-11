@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+
+# Environment Variables
+.env
+
+# Local Data (Prevent pushing massive trend logs)
+*.json
+run_log.txt
+raw_trends.json
+daily_beauty_insights.json
+
+# Playwright
+.playwright/
+ms-playwright/
+
+# Config (Keep template but hide real one if needed, but usually config.yaml is shared)
+# config.yaml  <-- Uncomment if you want to hide search queries
+
+# OS
+.DS_Store
+Thumbs.db

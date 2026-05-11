@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+PyYAML
+asyncio
+python-dotenv
+# Add existing requirements from the root
+# (In a real scenario, we might merge these)
+requests
+playwright
+beautifulsoup4
+google-generativeai

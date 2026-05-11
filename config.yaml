@@ -1,0 +1,38 @@
+categories:
+  - name: "Skin Care"
+    keywords: ["barrier repair", "active ingredients", "ingredient analysis", "ceramides", "peptides", "niacinamide", "hyaluronic acid", "gel-cream", "sunscreen stick", "cleansing oil", "vitamin c", "retinol", "double cleanse", "slugging", "skin barrier"]
+    subreddits: ["IndianSkincareAddicts", "SkincareAddiction", "AsianBeauty"]
+    rss:
+      - "https://news.google.com/rss/search?q=skincare+ingredients+trends+india+when:7d&hl=en-IN&gl=IN&ceid=IN:en"
+      - "https://news.google.com/rss/search?q=dermatology+recommended+skincare+india+when:7d&hl=en-IN&gl=IN&ceid=IN:en"
+      - "https://news.google.com/rss/search?q=k-beauty+trends+india+skincare+when:7d&hl=en-IN&gl=IN&ceid=IN:en"
+
+  - name: "Makeup"
+    keywords: ["tinted lip oil", "matte blush", "cream bronzer", "translucent powder", "liquid lipstick", "vinyl finish", "berry lips", "monochromatic makeup", "concealer", "foundation shade", "eyeliner trend"]
+    subreddits: ["IndianMakeupAddicts", "MakeupAddiction"]
+    rss:
+      - "https://news.google.com/rss/search?q=makeup+product+trends+india+when:7d&hl=en-IN&gl=IN&ceid=IN:en"
+      - "https://news.google.com/rss/search?q=trending+lipstick+shades+india+when:7d&hl=en-IN&gl=IN&ceid=IN:en"
+      - "https://news.google.com/rss/search?q=bridal+makeup+kit+trends+india+when:7d&hl=en-IN&gl=IN&ceid=IN:en"
+
+  - name: "Hair Care"
+    keywords: ["scalp serum", "hair growth oil", "rosemary water", "bond repair", "hair mask", "anti-frizz serum", "volumizing spray", "sulfate-free shampoo", "hair oiling", "dandruff", "hair fall", "scalp scrub"]
+    subreddits: ["IndianHaircare", "HaircareScience", "curlyhair"]
+    rss:
+      - "https://news.google.com/rss/search?q=scalp+care+trends+india+when:7d&hl=en-IN&gl=IN&ceid=IN:en"
+      - "https://news.google.com/rss/search?q=hair+growth+ingredients+india+when:7d&hl=en-IN&gl=IN&ceid=IN:en"
+      - "https://news.google.com/rss/search?q=new+hair+launch+india+when:7d&hl=en-IN&gl=IN&ceid=IN:en"
+
+brand_portfolio:
+  - "Dove"
+  - "Pond's"
+  - "Lakmé"
+  - "TRESemmé"
+  - "Indulekha"
+  - "Simple"
+  - "Vaseline"
+  - "Love Beauty and Planet"
+
+thresholds:
+  min_relevance_score: 8
+  max_trends_per_day: 5
