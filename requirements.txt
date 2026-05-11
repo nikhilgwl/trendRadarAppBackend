@@ -8,3 +8,4 @@ requests
 pyyaml
 google-generativeai
 python-dotenv
+beautifulsoup4
