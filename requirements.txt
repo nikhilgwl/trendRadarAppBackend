@@ -7,5 +7,9 @@ feedparser
 requests
 pyyaml
 google-generativeai
+google-genai
 python-dotenv
 beautifulsoup4
+httpx
+urllib3
+praw
