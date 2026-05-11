@@ -7,33 +7,36 @@ import os
 
 logger = logging.getLogger(__name__)
 
+BEAUTY_KEYWORDS = [
+    'skin', 'hair', 'makeup', 'beauty', 'serum', 'cream', 'oil', 'shampoo', 
+    'lipstick', 'foundation', 'glow', 'acne', 'vitamin', 'acid', 'moisturizer',
+    'routine', 'facial', 'derma', 'cosmetic', 'loreal', 'lakme', 'nykaa',
+    'skincare', 'haircare', 'wellness', 'spa', 'retinol', 'niacinamide'
+]
+
 def get_google_trends():
-    """Fetch top trending searches in India using RSS as primary and pytrends as fallback."""
-    trends = []
+    """Fetch trending searches in India and filter for beauty relevance."""
+    all_trends = []
     
-    # Method 1: RSS Feed (Most reliable currently)
+    # Method 1: RSS Feed
     try:
         rss_url = "https://trends.google.com/trending/rss?geo=IN"
         feed = feedparser.parse(rss_url)
         if feed.entries:
             for entry in feed.entries:
-                trends.append(entry.title)
-            logger.info(f"Fetched {len(trends)} trends via RSS.")
+                all_trends.append(entry.title)
     except Exception as e:
         logger.warning(f"RSS trends fetch failed: {e}")
 
-    # Method 2: Pytrends (Fallback, though often 404s recently)
-    if not trends:
-        try:
-            pytrends = TrendReq(hl='en-IN', tz=330)
-            trending_searches = pytrends.trending_searches(pn='IN')
-            if not trending_searches.empty:
-                trends.extend(trending_searches[0].tolist()[:20])
-                logger.info(f"Fetched {len(trends)} trends via Pytrends.")
-        except Exception as e:
-            logger.warning(f"Pytrends fetch failed: {e}")
+    # Filter for beauty relevance
+    beauty_trends = []
+    for trend in all_trends:
+        trend_lower = trend.lower()
+        if any(kw in trend_lower for kw in BEAUTY_KEYWORDS):
+            beauty_trends.append(trend)
             
-    return list(set(trends)) # Deduplicated
+    logger.info(f"Filtered {len(beauty_trends)} beauty trends out of {len(all_trends)} total searches.")
+    return list(set(beauty_trends))
 
 def get_breakout_trends(keywords):
     """
