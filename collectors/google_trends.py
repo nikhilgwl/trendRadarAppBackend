@@ -9,38 +9,37 @@ logger = logging.getLogger(__name__)
 
 # Category IDs: 242 (Skin Care), 241 (Hair Care), 234 (Makeup & Cosmetics)
 BEAUTY_CATEGORIES = [242, 241, 234]
+BEAUTY_KEYWORDS = ['skin', 'hair', 'makeup', 'beauty', 'serum', 'cream', 'glow', 'lipstick', 'skincare', 'haircare']
 
 def get_google_trends():
-    """Directly fetch 'Rising' beauty trends using Google Category IDs."""
-    direct_trends = []
+    """Fetch beauty trends using Direct Category search with an RSS fallback."""
+    trends = []
+    
+    # Method 1: Direct Category Search (Best data, but easily blocked)
     try:
         pytrends = TrendReq(hl='en-IN', tz=330)
-        
         for cat_id in BEAUTY_CATEGORIES:
-            try:
-                # We search for 'Rising' queries in India for these categories over the last 7 days
-                pytrends.build_payload(kw_list=[''], cat=cat_id, timeframe='now 7-d', geo='IN')
-                related_queries = pytrends.related_queries()
-                
-                # 'rising' queries are those with the highest growth percentage
-                rising_data = related_queries.get('', {}).get('rising')
-                
-                if rising_data is not None and not rising_data.empty:
-                    # Extract the query strings
-                    queries = rising_data['query'].tolist()
-                    direct_trends.extend(queries[:10]) # Top 10 from each category
-                    logger.info(f"Fetched {len(queries)} direct trends for category {cat_id}")
-            except Exception as e:
-                logger.warning(f"Failed to fetch for category {cat_id}: {e}")
-                
+            pytrends.build_payload(kw_list=[''], cat=cat_id, timeframe='now 7-d', geo='IN')
+            rising_data = pytrends.related_queries().get('', {}).get('rising')
+            if rising_data is not None and not rising_data.empty:
+                trends.extend(rising_data['query'].tolist()[:10])
     except Exception as e:
-        logger.error(f"Pytrends initialization failed: {e}")
+        logger.warning(f"Direct category search failed (likely blocked): {e}")
 
-    # Fallback to general RSS if direct search fails (with filter)
-    if not direct_trends:
-        return [] # Or use the previous filtering logic as a backup
+    # Method 2: RSS Fallback + Filter (Always works, but noisier)
+    if not trends:
+        try:
+            rss_url = "https://trends.google.com/trending/rss?geo=IN"
+            feed = feedparser.parse(rss_url)
+            for entry in feed.entries:
+                title = entry.title
+                if any(kw in title.lower() for kw in BEAUTY_KEYWORDS):
+                    trends.append(title)
+            logger.info("Direct search failed; used Filtered RSS fallback.")
+        except Exception as e:
+            logger.error(f"RSS fallback failed: {e}")
 
-    return list(set(direct_trends))
+    return list(set(trends))
 
 def get_breakout_trends(keywords):
     """
