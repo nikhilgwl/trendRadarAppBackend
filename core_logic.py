@@ -10,6 +10,7 @@ from collectors.rss_collector import get_rss_trends
 from collectors.social_collector import get_social_trends
 from collectors.pinterest_collector import get_pinterest_trends
 from brain.gemini_filter import get_categorized_trends
+import db
 
 # Setup logging
 logging.basicConfig(
@@ -58,8 +59,12 @@ async def collect_raw_data():
         "pinterest": pinterest
     }
 
+    # Persist to local file (always)
     with open(RAW_DATA_FILE, "w") as f:
         json.dump(raw_payload, f, indent=4)
+
+    # Persist to Supabase (primary source for frontend)
+    db.save_raw_trends(raw_payload)
     
     logger.info("Raw data collection complete.")
     return raw_payload
@@ -94,8 +99,11 @@ async def generate_ai_summary():
     
     if trends:
         ai_payload = {"timestamp": datetime.now().isoformat(), "trends": trends}
+        # Persist to local file (always)
         with open(AI_SUMMARY_FILE, "w") as f:
             json.dump(ai_payload, f, indent=4)
+        # Persist to Supabase
+        db.save_ai_digest(ai_payload)
         logger.info("AI Summary generated successfully.")
         return ai_payload
     

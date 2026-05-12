@@ -13,3 +13,4 @@ beautifulsoup4
 httpx
 urllib3
 praw
+supabase
