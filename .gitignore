@@ -38,6 +38,10 @@ daily_beauty_insights.json
 .playwright/
 ms-playwright/
 
+# Auth session caches (contain live credentials)
+instagram_session.json
+accounts.db
+
 # Config (Keep template but hide real one if needed, but usually config.yaml is shared)
 # config.yaml  <-- Uncomment if you want to hide search queries
 

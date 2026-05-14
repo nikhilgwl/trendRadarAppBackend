@@ -1,41 +1,31 @@
-import requests
-from bs4 import BeautifulSoup
+import feedparser
 import logging
-from pytrends.request import TrendReq
 
 logger = logging.getLogger(__name__)
 
-def get_social_trends(config):
+BEAUTY_YOUTUBE_CHANNELS = {
+    'BeBeautiful': 'UC9OGv_UQ1JCbz5IDIQiLpAg',
+    'Nykaa': 'UCywSjzALmEHrYXB4GYqxnlA',
+    'Shruti Arjun Anand': 'UCBg8GrJ5MQfE9OqiYYMdEDQ',
+}
+
+def get_social_trends(config=None):
     """
-    Combined social trend fetcher with multi-layer fallback.
+    Fetch trending beauty videos from top Indian YouTube channels via RSS.
+    Replaces old Twitter scrape.
     """
     trends = []
     
-    # 1. Twitter India Trends (Scrape)
-    try:
-        url = "https://getdaytrends.com/india/"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            trend_elements = soup.select('td.main a')
-            all_hashtags = [el.text.strip() for el in trend_elements]
-            trends.extend(all_hashtags[:10])
-            logger.info(f"Fetched {len(all_hashtags)} hashtags from Twitter India.")
-    except Exception as e:
-        logger.error(f"Error fetching Twitter trends: {e}")
-
-    # 2. Google Trends (API - Prone to 429/404)
-    try:
-        # Use a fresh request object each time to avoid 404 session issues
-        pytrends = TrendReq(hl='en-IN', tz=330, retries=2, backoff_factor=0.1)
-        trending_searches = pytrends.trending_searches(pn='india')
-        if not trending_searches.empty:
-            trends.extend(trending_searches[0].tolist()[:10])
-            logger.info("Fetched top 10 trending searches from Google India.")
-    except Exception as e:
-        logger.warning(f"Google Trends API failed: {e}. Moving on.")
-        
+    for name, channel_id in BEAUTY_YOUTUBE_CHANNELS.items():
+        try:
+            url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:3]:
+                title = getattr(entry, 'title', '').strip()
+                if title:
+                    trends.append(title)
+            logger.info(f"Fetched {len(feed.entries[:3])} videos from YouTube channel {name}")
+        except Exception as e:
+            logger.error(f"Error fetching YouTube RSS for {name}: {e}")
+            
     return list(set(trends))

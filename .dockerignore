@@ -1,0 +1,24 @@
+# Secrets — must never be baked into the image
+.env
+instagram_session.json
+accounts.db
+
+# Runtime artefacts
+__pycache__/
+*.py[cod]
+*.pyc
+run_log.txt
+raw_trends.json
+daily_beauty_insights.json
+
+# Dev tooling
+venv/
+ENV/
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db

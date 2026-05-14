@@ -6,11 +6,13 @@ pandas
 feedparser
 requests
 pyyaml
-google-generativeai
 google-genai
 python-dotenv
 beautifulsoup4
 httpx
-urllib3
-praw
+urllib3<2
 supabase
+openpyxl
+instagrapi
+curl_cffi
+cloudscraper

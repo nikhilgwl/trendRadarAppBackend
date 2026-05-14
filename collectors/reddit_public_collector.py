@@ -8,6 +8,28 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+# Fix 3: module-level flag — None = untested, True = works, False = blocked
+_playwright_available = None
+
+
+def _check_playwright() -> bool:
+    """Test-launch Playwright once. Result cached for the process lifetime."""
+    global _playwright_available
+    if _playwright_available is not None:
+        return _playwright_available
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            browser.close()
+        _playwright_available = True
+        logger.info("Playwright: browser launch successful — will use for Reddit.")
+    except Exception as e:
+        _playwright_available = False
+        logger.info(f"Playwright unavailable ({e}) — Reddit will use RSS only.")
+    return _playwright_available
+
+
 def _fetch_via_rss(clean_name, now):
     """
     Fetch posts via Reddit's public RSS feed.
@@ -35,21 +57,19 @@ def _fetch_via_rss(clean_name, now):
                 created_at = datetime.fromtimestamp(time.mktime(published), timezone.utc)
                 age_hours = (now - created_at).total_seconds() / 3600
             else:
-                age_hours = 12  # Assume recent if no timestamp
+                age_hours = 12
 
             if 0 < age_hours <= 24:
-                # RSS doesn't give upvotes; use comment count as proxy
-                summary = entry.get('summary', '')
                 posts.append({
                     "title": title,
-                    "score": 0,  # RSS doesn't expose scores
+                    "score": 0,
                     "num_comments": 0,
                     "subreddit": clean_name,
                     "velocity": 1.0 / max(age_hours, 0.1),
                     "url": link
                 })
 
-        logger.info(f"✅ RSS: {len(posts)} posts from r/{clean_name}")
+        logger.info(f"RSS: {len(posts)} posts from r/{clean_name}")
     except Exception as e:
         logger.warning(f"RSS fetch failed for r/{clean_name}: {e}")
 
@@ -58,8 +78,8 @@ def _fetch_via_rss(clean_name, now):
 
 def _fetch_via_playwright(clean_name, now):
     """
-    Fetch posts via Playwright headless browser (works locally, blocked on cloud IPs).
-    Falls back gracefully if Playwright is not available.
+    Fetch posts via Playwright headless browser.
+    Only called when _check_playwright() confirmed the browser can launch.
     """
     posts = []
     try:
@@ -84,15 +104,12 @@ def _fetch_via_playwright(clean_name, now):
                 try:
                     url = f"https://www.reddit.com/r/{clean_name}/{endpoint}.json?limit=30"
                     response = page.goto(url, timeout=20000, wait_until='domcontentloaded')
-                    
+
                     if not response or not response.ok:
-                        logger.warning(f"Playwright: Failed to load {endpoint} for r/{clean_name} (Status: {response.status if response else 'No Response'})")
                         continue
 
-                    # Check if response is actually JSON
                     content_type = response.headers.get('content-type', '')
                     if 'application/json' not in content_type:
-                        logger.debug(f"Playwright: Non-JSON response for {endpoint} in r/{clean_name}")
                         continue
 
                     raw_text = page.inner_text('body')
@@ -101,7 +118,7 @@ def _fetch_via_playwright(clean_name, now):
 
                     data = json.loads(raw_text)
                     children = data.get('data', {}).get('children', [])
-                    logger.info(f"✅ Playwright: {len(children)} posts from r/{clean_name} ({endpoint})")
+                    logger.info(f"Playwright: {len(children)} posts from r/{clean_name} ({endpoint})")
 
                     for post_data in children:
                         post = post_data.get('data', {})
@@ -134,26 +151,31 @@ def _fetch_via_playwright(clean_name, now):
 
 def get_reddit_trends(config):
     """
-    Context-Aware Reddit collector:
-    Broadly collects beauty discussions and uses 'Pattern Recognition' 
-    to prioritize trends rather than strict keyword matching.
+    Context-Aware Reddit collector.
+    Fix 3: Playwright is only attempted if a one-time launch test confirms it works.
+    On cloud servers where Playwright is blocked, goes straight to RSS for all subreddits.
     """
     subreddits = [s for c in config['categories'] for s in c['subreddits']]
-    
-    # Pattern keywords for discovery (not just specific ingredients)
+
     discovery_patterns = [
-        "launch", "viral", "spotted", "new", "review", "comparison", 
+        "launch", "viral", "spotted", "new", "review", "comparison",
         "dupe", "alternative", "holy grail", "routine", "method",
         "ingredients", "worth it", "hype", "spotted", "launching"
     ]
-    
+
     all_posts = []
     now = datetime.now(timezone.utc)
-    
+
+    # Fix 3: check once if Playwright works before iterating all subreddits
+    use_playwright = _check_playwright()
+
     for sub_name in subreddits:
         clean_name = sub_name.replace("r/", "") if sub_name.startswith("r/") else sub_name
-        playwright_posts = _fetch_via_playwright(clean_name, now)
-        all_posts.extend(playwright_posts)
+
+        if use_playwright:
+            playwright_posts = _fetch_via_playwright(clean_name, now)
+            all_posts.extend(playwright_posts)
+
         rss_posts = _fetch_via_rss(clean_name, now)
         all_posts.extend(rss_posts)
         time.sleep(random.uniform(0.5, 1.5))
@@ -161,29 +183,22 @@ def get_reddit_trends(config):
     # Deduplicate by URL
     unique_posts = {p['url']: p for p in all_posts}.values()
 
-    # Contextual Filtering: Keep posts that look like "Trends" or "Intelligence"
-    # rather than just personal medical questions.
     filtered_posts = []
     for post in unique_posts:
         title_lower = post['title'].lower()
-        
-        # Pattern 1: High Engagement (Automatically a trend signal)
+
         if post.get('score', 0) > 50 or post.get('num_comments', 0) > 20:
             filtered_posts.append(post)
             continue
-            
-        # Pattern 2: Discovery Keywords (Looking for newness)
+
         if any(p in title_lower for p in discovery_patterns):
             filtered_posts.append(post)
             continue
-            
-        # Pattern 3: Ingredient-like terminology (Discovery of new actives)
-        # Regex-like check for common beauty suffixes
+
         if any(suffix in title_lower for suffix in [" acid", "amide", "inol", " peptide", " serum", " cream"]):
             filtered_posts.append(post)
             continue
-    
-    # Sort by score/engagement
+
     results = sorted(filtered_posts, key=lambda x: x['score'], reverse=True)
-    logger.info(f"TOTAL PATTERN-RELEVANT POSTS: {len(results)} (Broadened from {len(unique_posts)})")
+    logger.info(f"Reddit total: {len(results)} relevant posts (from {len(list(unique_posts))} unique)")
     return results
