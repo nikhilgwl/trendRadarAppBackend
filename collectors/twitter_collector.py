@@ -145,9 +145,7 @@ def _fetch_x_api_trends() -> list:
 def _fetch_trends24() -> list:
     """
     Scrape trends24.in for India X trending topics.
-    Returns ALL trends (not beauty-filtered) — the X API primary source is often blocked,
-    so the fallback returns everything and lets Gemini filter for relevance at synthesis time.
-    Hard-exclude obvious non-beauty noise (sports, politics, accidents).
+    Beauty-filtered — only topics matching BEAUTY_FILTER keywords are kept.
     """
     try:
         resp = cf_requests.get('https://trends24.in/india/', headers=_HEADERS,
@@ -161,10 +159,10 @@ def _fetch_trends24() -> list:
             for el in section.select('li a'):
                 t = el.text.strip()
                 key = t.lower()
-                if t and key not in seen and not any(ex in key for ex in EXCLUDE_FILTER):
+                if t and key not in seen and _is_beauty(t):
                     seen.add(key)
                     items.append(t)
-        logger.info(f'trends24.in: {len(items)} trends (unfiltered)')
+        logger.info(f'trends24.in: {len(items)} beauty trends')
         return items
     except Exception as e:
         logger.error(f'trends24.in failed: {e}')
@@ -174,7 +172,7 @@ def _fetch_trends24() -> list:
 def _fetch_getdaytrends() -> list:
     """
     Scrape getdaytrends.com for India X trending topics.
-    Returns ALL trends (not beauty-filtered) — same rationale as trends24 fallback.
+    Beauty-filtered — only topics matching BEAUTY_FILTER keywords are kept.
     """
     try:
         resp = cf_requests.get('https://getdaytrends.com/india/', headers=_HEADERS,
@@ -183,8 +181,8 @@ def _fetch_getdaytrends() -> list:
             return []
         soup = BeautifulSoup(resp.text, 'html.parser')
         items = [el.text.strip() for el in soup.select('td.main a') if el.text.strip()]
-        filtered = [t for t in items if not any(ex in t.lower() for ex in EXCLUDE_FILTER)]
-        logger.info(f'getdaytrends: {len(filtered)} trends (unfiltered)')
+        filtered = [t for t in items if _is_beauty(t)]
+        logger.info(f'getdaytrends: {len(filtered)} beauty trends')
         return filtered
     except Exception as e:
         logger.error(f'getdaytrends failed: {e}')
