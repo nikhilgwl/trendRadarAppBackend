@@ -141,6 +141,20 @@ async def search_trends(q: str = Query(..., min_length=2)):
     return {"query": q, "count": len(results), "results": results}
 
 
+@app.get("/api/search/relevant")
+async def get_search_relevant(q: str = Query(..., min_length=2)):
+    """
+    Use Gemini to synthesise the top fuzzy-matched raw results into
+    3-5 AI-digest-format trend cards most relevant to the query.
+    """
+    from brain.gemini_filter import search_synthesize
+    raw_results = db.search_raw_trends(q, days=180)
+    if not raw_results:
+        return {"query": q, "trends": []}
+    trends = await asyncio.to_thread(search_synthesize, q, raw_results)
+    return {"query": q, "trends": trends}
+
+
 @app.get("/api/competitor-signals")
 async def get_competitor_signals(days: int = Query(7, ge=1, le=180)):
     signals = db.load_competitor_signals(days=days)

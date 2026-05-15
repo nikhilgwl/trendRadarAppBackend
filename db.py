@@ -101,10 +101,12 @@ def load_raw_trends() -> dict | None:
 
 def search_raw_trends(query: str, days: int = 180) -> list:
     """
-    Full-text search across historical raw_trends data.
-    Fetches recent rows and filters in Python because Supabase PostgREST
-    doesn't support ilike on JSONB cast columns (data::text).
+    Fuzzy search across historical raw_trends data.
+    Token-based scoring: exact phrase → 10pts, all tokens → 8pts,
+    majority tokens → proportional, any token → partial score.
+    Results are sorted by score descending.
     """
+    import re as _re
     client = get_client()
     if not client:
         return []
@@ -120,7 +122,26 @@ def search_raw_trends(query: str, days: int = 180) -> list:
             .execute()
         )
 
-        q = query.lower()
+        from difflib import SequenceMatcher
+
+        q_exact = query.lower().strip()
+        # Tokenise: words of 2+ chars
+        q_tokens = [t for t in _re.split(r'\s+', q_exact) if len(t) >= 2]
+
+        def _token_matches(token: str, text: str) -> bool:
+            """Exact substring OR fuzzy similarity ≥ 0.80 for tokens ≥ 5 chars."""
+            if token in text:
+                return True
+            if len(token) >= 5:
+                # Slide a window across text words for character-level fuzzy
+                words = _re.split(r'\W+', text)
+                for word in words:
+                    if abs(len(word) - len(token)) <= 2:
+                        ratio = SequenceMatcher(None, token, word).ratio()
+                        if ratio >= 0.80:
+                            return True
+            return False
+
         results = []
         seen_keys: set = set()
 
@@ -132,17 +153,35 @@ def search_raw_trends(query: str, days: int = 180) -> list:
             items = data if isinstance(data, list) else [data]
             for item in items:
                 item_str = json.dumps(item).lower()
-                if q in item_str:
-                    key = item_str[:80]
-                    if key in seen_keys:
-                        continue
-                    seen_keys.add(key)
-                    results.append({
-                        "platform": platform,
-                        "collected_at": collected_at,
-                        "item": item,
-                    })
 
+                # Fuzzy scoring
+                if q_exact in item_str:
+                    score = 10                        # exact phrase match
+                elif q_tokens:
+                    matched = sum(1 for t in q_tokens if _token_matches(t, item_str))
+                    if matched == 0:
+                        continue
+                    elif matched == len(q_tokens):
+                        score = 8                    # all tokens present (exact or fuzzy)
+                    elif matched >= max(1, len(q_tokens) * 0.5):
+                        score = 3 + matched          # majority of tokens
+                    else:
+                        score = matched              # minority match
+                else:
+                    continue
+
+                key = item_str[:80]
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                results.append({
+                    "platform": platform,
+                    "collected_at": collected_at,
+                    "item": item,
+                    "score": score,
+                })
+
+        results.sort(key=lambda x: -x["score"])
         return results
     except Exception as e:
         logger.error(f"search_raw_trends failed: {e}")
@@ -380,6 +419,9 @@ def get_digest_history(keyword: str, days: int = 30) -> dict:
         return {"appearances": 0, "digest_dates": []}
 
 
+_MARKETPLACE_PLATFORMS = {"Amazon Bestseller", "Nykaa Bestseller"}
+
+
 def get_competitor_digest(days: int = 7) -> dict:
     """
     Aggregate competitor_signals for the past N days, grouped by brand.
@@ -387,6 +429,8 @@ def get_competitor_digest(days: int = 7) -> dict:
       - competitors: {brand_name: {count, platforms, recent_mentions}}
       - own_brands:  {brand_name: {count, platforms, recent_mentions}}
     HUL entries are identified by the "HUL:" prefix in the competitor field.
+    Marketplace platforms (Amazon/Nykaa bestsellers) are excluded — Share-of-Voice
+    is based on organic social/editorial mentions only.
     """
     signals = load_competitor_signals(days=days)
 
@@ -394,6 +438,9 @@ def get_competitor_digest(days: int = 7) -> dict:
     own_brands: dict = {}
 
     for s in signals:
+        # Exclude marketplace product-name matches — not organic social mentions
+        if s.get("platform") in _MARKETPLACE_PLATFORMS:
+            continue
         raw = s.get("competitor", "")
         is_own = raw.startswith("HUL:")
         brand = raw[4:] if is_own else raw

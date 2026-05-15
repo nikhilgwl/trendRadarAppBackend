@@ -143,7 +143,12 @@ def _fetch_x_api_trends() -> list:
 
 
 def _fetch_trends24() -> list:
-    """Scrape trends24.in for India X trending topics."""
+    """
+    Scrape trends24.in for India X trending topics.
+    Returns ALL trends (not beauty-filtered) — the X API primary source is often blocked,
+    so the fallback returns everything and lets Gemini filter for relevance at synthesis time.
+    Hard-exclude obvious non-beauty noise (sports, politics, accidents).
+    """
     try:
         resp = cf_requests.get('https://trends24.in/india/', headers=_HEADERS,
                                impersonate='chrome', timeout=15)
@@ -152,15 +157,14 @@ def _fetch_trends24() -> list:
         soup = BeautifulSoup(resp.text, 'html.parser')
         seen = set()
         items = []
-        for section in soup.select('ol.trend-card__list')[:4]:
+        for section in soup.select('ol.trend-card__list')[:6]:
             for el in section.select('li a'):
                 t = el.text.strip()
                 key = t.lower()
-                if t and key not in seen:
+                if t and key not in seen and not any(ex in key for ex in EXCLUDE_FILTER):
                     seen.add(key)
-                    if _is_beauty(t):
-                        items.append(t)
-        logger.info(f'trends24.in: {len(items)} beauty trends')
+                    items.append(t)
+        logger.info(f'trends24.in: {len(items)} trends (unfiltered)')
         return items
     except Exception as e:
         logger.error(f'trends24.in failed: {e}')
@@ -168,7 +172,10 @@ def _fetch_trends24() -> list:
 
 
 def _fetch_getdaytrends() -> list:
-    """Scrape getdaytrends.com for India X trending topics."""
+    """
+    Scrape getdaytrends.com for India X trending topics.
+    Returns ALL trends (not beauty-filtered) — same rationale as trends24 fallback.
+    """
     try:
         resp = cf_requests.get('https://getdaytrends.com/india/', headers=_HEADERS,
                                impersonate='chrome', timeout=15)
@@ -176,9 +183,9 @@ def _fetch_getdaytrends() -> list:
             return []
         soup = BeautifulSoup(resp.text, 'html.parser')
         items = [el.text.strip() for el in soup.select('td.main a') if el.text.strip()]
-        beauty = [t for t in items if _is_beauty(t)]
-        logger.info(f'getdaytrends: {len(beauty)} beauty trends')
-        return beauty
+        filtered = [t for t in items if not any(ex in t.lower() for ex in EXCLUDE_FILTER)]
+        logger.info(f'getdaytrends: {len(filtered)} trends (unfiltered)')
+        return filtered
     except Exception as e:
         logger.error(f'getdaytrends failed: {e}')
         return []

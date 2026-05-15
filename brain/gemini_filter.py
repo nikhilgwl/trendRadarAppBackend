@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # User-specified model (Fix: updated to gemini-2.5-flash-lite-preview per product team)
-_MODEL_ID = "gemini-2.5-flash-lite-preview-06-17"
+_MODEL_ID = "gemini-3.1-flash-lite-preview"
 
 # D: Indian subreddits carry higher signal weight for HUL India
 _INDIAN_SUBREDDITS = {
@@ -218,3 +218,99 @@ COMPETITOR SIGNALS (pre-detected — use for competitor_intel field):
 
     logger.info(f"Gemini returned {len(trends)} trends.")
     return trends
+
+
+# ── Search synthesis ─────────────────────────────────────────────────────────
+
+_SEARCH_SYSTEM_INSTRUCTION = """You are an Expert Beauty Intelligence Analyst for HUL (Hindustan Unilever) India.
+A user searched for a specific topic. You are given the raw matched results from 6 months of collected data.
+Your job: synthesise the TOP 3 to 5 most relevant, actionable intelligence items — in the same format as the daily digest.
+
+Rules:
+1. Only surface items genuinely relevant to the user's query. Do not pad.
+2. trend_name: Hyper-specific insight distilled from the matched data (not just the query repeated).
+3. context: Why this result matters for HUL — cite the platform and data point (max 25 words).
+4. result: One concrete HUL action from this insight (max 20 words).
+5. content_idea: Specific 2-week activation HUL could execute (max 30 words).
+6. urgency: URGENT | MONITOR | WATCH based on signal strength.
+7. competitor_intel: Name any competitor detected in the data, else null.
+8. category: Skincare | Haircare | Makeup | Other.
+
+OUTPUT: JSON array of 3 to 5 objects. Return fewer if the data doesn't support more — quality over quantity.
+[
+  {
+    "label": "[SEARCH INSIGHT]",
+    "category": "Skincare",
+    "trend_name": "...",
+    "source_platform": "...",
+    "metric": "...",
+    "context": "...",
+    "result": "...",
+    "content_idea": "...",
+    "urgency": "MONITOR",
+    "competitor_intel": "..." or null
+  }
+]"""
+
+
+def search_synthesize(query: str, raw_results: list) -> list:
+    """
+    Take a user search query + top fuzzy-matched raw results,
+    synthesise 3-5 AI digest-format trends using Gemini.
+    Returns [] on failure so the frontend can degrade gracefully.
+    """
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key or not raw_results:
+        return []
+
+    # Format the top results into a readable block for Gemini
+    lines = []
+    for r in raw_results[:25]:
+        platform = r.get("platform", "unknown").upper()
+        item = r.get("item", {})
+        if isinstance(item, dict):
+            text = (
+                item.get("title") or item.get("product_name") or
+                item.get("caption") or item.get("query") or
+                item.get("summary") or str(item)
+            )[:200]
+        else:
+            text = str(item)[:200]
+        collected = r.get("collected_at", "")[:10]
+        lines.append(f"[{platform} · {collected}] {text}")
+
+    results_block = "\n".join(lines)
+    prompt = f"""User searched for: "{query}"
+
+Matched raw data from 6 months of collection:
+{results_block}
+
+Synthesise the 3-5 most actionable intelligence items relevant to "{query}" for HUL India."""
+
+    try:
+        client = genai.Client(api_key=api_key)
+        cfg = types.GenerateContentConfig(
+            system_instruction=_SEARCH_SYSTEM_INSTRUCTION,
+            temperature=0.2,
+            response_mime_type="application/json",
+        )
+        logger.info(f"Calling Gemini for search synthesis: '{query}'")
+        response = client.models.generate_content(
+            model=_MODEL_ID,
+            contents=prompt,
+            config=cfg,
+        )
+        if not response.text:
+            return []
+        trends = json.loads(response.text.strip())
+        # Attach HUL product matches (same as main digest)
+        for trend in trends:
+            search_text = f"{trend.get('trend_name', '')} {trend.get('context', '')} {trend.get('category', '')}"
+            trend["hul_products"] = match_products(search_text, limit=5, category_hint=trend.get("category", ""))
+            trend["is_new"] = False
+            trend["gap_opportunity"] = len(trend.get("hul_products", [])) == 0
+        logger.info(f"Search synthesis returned {len(trends)} trends for '{query}'")
+        return trends
+    except Exception as e:
+        logger.error(f"search_synthesize failed: {e}")
+        return []
